@@ -13,3 +13,5 @@ Includes a more robust version of the packing method howManyFit, and can convert
 Validates outgoing EDI 810 invoice documents before they are sent to the customer.
 
 KARTS was created for TrippNT Carts in collaboration with Sam Skiver, Kyle Malios, and Jason Ayers.
+
+***The supporting files for this code may contain private and/or proprietary information, and as such cannot be shared publicly. To see videos of KARTS in action, please visit the TrippNT Lean Improvements channel on YouTube, and search for KARTS.***
