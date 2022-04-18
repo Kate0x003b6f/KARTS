@@ -1,5 +1,5 @@
 # KARTS
-KARTS (Kate's Automated Ready-To-Ship) performs a series of transformations on EDI order data, from checking prices against a list and calculating ship dates to validating addresses in the FedEx API and sending emails. It also generates SQL statements to modify order data that exists outside of the Order_Import table, which is needed to fully complete an order record in the ERP and database combination used at TrippNT.
+KARTS (Kate's Automated Ready-To-Ship) performs a series of transformations on EDI order data, from checking prices against a list and calculating ship dates to validating addresses in the FedEx API and sending emails. It also generates SQL statements to modify order data that exists outside of the Order_Import table, which is needed to fully complete an order record in the ERP and database combination currently in use at TrippNT.
 
 KARTS has several subcomponents:
 
