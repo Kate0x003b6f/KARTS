@@ -147,13 +147,7 @@ def convertToE2(lineItem, oMap, webOrder, posWithAlerts):
     nMap["ACCOUNTING ID"] = lineItem[oMap["ACCOUNTING ID"]]
     nMap["PURCHASE ORDER NUMBER"] = lineItem[oMap["PURCHASE ORDER NUMBER"]] + "-NP"
     if not lineItem[oMap["PURCHASE ORDER NUMBER"]] in posWithAlerts:
-        if custName == "AMAZON" or custName == "WAYFAIR":
-            nMap["PURCHASE ORDER NUMBER"] = lineItem[oMap["PURCHASE ORDER NUMBER"]]
-        elif (custName == "GLOBAL" or custName == "VWR INTERNATIONAL") and (shipMethod == "UPS" or
-                                                                            shipMethod == "UPS GROUND"):
-            nMap["PURCHASE ORDER NUMBER"] = lineItem[oMap["PURCHASE ORDER NUMBER"]]
-        elif custName == "FISHER SCIENTIFIC" and shipMethod == "TRIPPNT GROUND":
-            nMap["PURCHASE ORDER NUMBER"] = lineItem[oMap["PURCHASE ORDER NUMBER"]]
+        nMap["PURCHASE ORDER NUMBER"] = lineItem[oMap["PURCHASE ORDER NUMBER"]]
     nMap["PO DATE"] = lineItem[oMap["PO DATE"]]
     nMap["SHIP TO NAME"] = lineItem[oMap["SHIP TO NAME"]]
     nMap["SHIP TO ADDRESS 1"] = lineItem[oMap["SHIP TO ADDRESS 1"]]
@@ -540,7 +534,7 @@ def createSQL(poHeader, freight, sqlCounter):
     mode = 'a'
     if sqlCounter <= 1:
         mode = 'w'
-    sqlOutput = open('H:\\Order Entry\\KARTS files\\SQL\\sqlOutput'+str(documentDate)+'.txt', mode)
+    sqlOutput = open('H:\\Order Entry\\KARTS files\\SQL\\sqlOutput'+str(documentDate)+'.sql', mode)
     sqlOutput.write(baseSQL)
     sqlOutput.close()
 
@@ -588,6 +582,7 @@ subject_reasons = []
 portalRejectList = ["AMAZON", "AMAZON DIRECT", "WAYFAIR"]
 send855List = ["VWR INTERNATIONAL", "FISHER SCIENTIFIC", "AMAZON"]
 fixPrice = ["WAYFAIR"]
+rejectAll = ["AMAZON"]  # Sends a rejection 855 soley based on this. Set up specifically for Amazon rn.
 
 # Relating to pricing
 price_dict = {}
@@ -864,7 +859,17 @@ with open(maxFile, 'r', errors='replace') as PO:
                 row[20] = "UPS GROUND"
             elif row[1] == "FISHER SCIENTIFIC":
                 row[20] = "TRIPPNT GROUND"
-
+            if customer in rejectAll:
+                POALine = ["855", customer, "Original", "Acknowledge - With Detail and Change", PO_Number,
+                           po_date.strftime("%m/%d/%Y"), "", "", "", "TrippNT", "10991 N Airworld Dr", "",
+                           "Kansas City", "MO", "64153", "", "Airworld", "", row[32], row[33], "", "", row[37],
+                           "ea", row[39], "", "", "", "", shipDate, "", "Cancelled: Out of Stock", row[37], "Each",
+                           "Canceled due to discontinued Item", row[4], row[5], row[6], row[7], row[8],
+                           shipZip, shipCountry, ]
+                if customer == "AMAZON DIRECT":
+                    POALine[3] = "Reject with Detail"
+                POAUpload.append(POALine)
+                continue  #should return control to the top of the "for" loop
             """Address check functionality begins here---------------------------------------------------------------"""
             if not (row[1] == "AMAZON" or row[4] == "VWR International"):
                 allAddressLines = [row[4], row[5], row[6], row[41], row[54], row[56], row[58]]
@@ -973,11 +978,23 @@ with open(maxFile, 'r', errors='replace') as PO:
                     # removes the FIRST instance of the character found in the resolved address from the
                     # corresponding cleaned address line
                     lineToReplace = cleanedAddressLines[a].upper()
-                    for char in streetAddress:
-                        lineToReplace = lineToReplace.replace(char, "", 1)
+                    # These words will always be removed
+                    alwaysRemove = [" STREET", " AVENUE", " ROAD", " LANE", "HIGHWAY", "INTERSTATE", " PARKWAY",
+                                    " TRAIL", " DRIVE"]
+                    # These words will only be removed if they are the only word left
+                    sometimesRemove = ["NORTH", "SOUTH", "EAST", "WEST", "NORTHEAST", "NORTHWEST", "SOUTHEAST",
+                                       "SOUTHWEST", "FIRST", "SECOND", "THIRD", "FOURTH", "FIFTH", "SIXTH", "SEVENTH",
+                                       "EIGHTH", "NINTH", "TENTH", "CIRCLE", "PARK", "SQUARE", "WAY"]
+                    addressWords = streetAddress.split(" ")
+                    wordsToRemove = alwaysRemove + addressWords
+                    for word in wordsToRemove:
+                        lineToReplace = lineToReplace.replace(word, "", 1)
                     if len(streetAddress2) > 0:
-                        for char in streetAddress2:
-                            lineToReplace = lineToReplace.replace(char, "", 1)
+                        addressWords2 = streetAddress2.split(" ")
+                        for word in addressWords2:
+                            lineToReplace = lineToReplace.replace(word, "", 1)
+                    if lineToReplace.replace(" ", "") in sometimesRemove:
+                        lineToReplace = ""
                     if len(lineToReplace.replace(" ", "")) > 0:
                         kartsNotes[PO_Number] = "Extra address text: "+lineToReplace
                     addressLines[a] = lineToReplace
@@ -1059,7 +1076,7 @@ with open(maxFile, 'r', errors='replace') as PO:
                     rejected.append(PO_Number)
                     reject_message = generate_message(row[12], PO_Number, "Discontinued", partNum, PO_Price)
                     rejectReason.append(reject_message)
-                    reject_emails.append(get_email(row[1]), customerAddresses)
+                    reject_emails.append(get_email(row[1], customerAddresses))
                     subject_reasons.append("Obsolete Product")
                 continue
             # Calculates the customer's discounted price. If discount is not defined, assumes the PO price is correct.
@@ -1110,7 +1127,7 @@ with open(maxFile, 'r', errors='replace') as PO:
                     rejected.append(PO_Number)
                     reject_message = generate_message(row[12], PO_Number, "Pricing", partNum, Dist_Price)
                     rejectReason.append(reject_message)
-                    reject_emails.append(get_email(row[1]), customerAddresses)
+                    reject_emails.append(get_email(row[1], customerAddresses))
                     subject_reasons.append("Pricing Discrepancy")
             # if the PO_Price is too high (more than 10%)
             elif Dist_Price * 1.1 < PO_Price and not webOrder:
@@ -1124,7 +1141,7 @@ with open(maxFile, 'r', errors='replace') as PO:
                     rejected.append(PO_Number)
                     reject_message = generate_message(row[12], PO_Number, "Pricing", partNum, Dist_Price)
                     rejectReason.append(reject_message)
-                    reject_emails.append(get_email(row[1]), customerAddresses)
+                    reject_emails.append(get_email(row[1], customerAddresses))
                     subject_reasons.append("Pricing Discrepancy")
             processing.append(row[x])
             # Handles customers in 855 list and appends to the list
@@ -1428,7 +1445,7 @@ if len(rejected) > 0:
                         server.sendmail(message["From"], message["To"], encoded_email)
                         # Code was being broken here "message["Bcc"],"
                         server.sendmail(message["From"], message["Bcc"], encoded_email)
-                    reject_emails.append(get_email(row[1]), customerAddresses)
+                    reject_emails.append(get_email(row[1], customerAddresses))
                     subject_reasons.append("Pricing Discrepancy")
                 except:
                     rejectLine.append(reject_emails[r])
